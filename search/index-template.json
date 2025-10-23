@@ -1,0 +1,21 @@
+{
+  "index_patterns": ["people*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 3,
+      "number_of_replicas": 1,
+      "analysis": { "analyzer": { "sf_text": { "type": "standard" } } }
+    },
+    "mappings": {
+      "properties": {
+        "name":    { "type": "text", "analyzer": "sf_text" },
+        "title":   { "type": "text", "analyzer": "sf_text" },
+        "company": { "type": "text", "analyzer": "sf_text" },
+        "email":   { "type": "keyword" },
+        "phone":   { "type": "keyword" },
+        "skills":  { "type": "keyword" },
+        "location":{ "type": "text", "analyzer": "sf_text" }
+      }
+    }
+  }
+}

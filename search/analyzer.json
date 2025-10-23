@@ -1,0 +1,1 @@
+{ "analysis": { "analyzer": { "sf_text": { "type": "standard" } } } }

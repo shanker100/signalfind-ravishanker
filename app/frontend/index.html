@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SignalFind</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 2rem; }
+    input { padding: .5rem; width: 280px; }
+    button { padding: .6rem 1rem; }
+    .card { border: 1px solid #ddd; padding: 1rem; margin: .5rem 0; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>SignalFind</h1>
+  <p>Type a query and press search.</p>
+  <input id="q" placeholder="e.g., machine learning" />
+  <button onclick="go()">Search</button>
+  <div id="out"></div>
+
+<script>
+async function go() {
+  const q = document.getElementById('q').value;
+  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+  const data = await res.json();
+  const out = document.getElementById('out'); out.innerHTML='';
+  (data.hits||[]).forEach(h => {
+    const d = document.createElement('div'); d.className='card';
+    d.innerHTML = `<strong>${h.name||'(no name)'} — ${h.title||''}</strong><br>
+                   <em>${h.company||''}</em><br>
+                   <small>${(h.skills||[]).join(', ')}</small>`;
+    out.appendChild(d);
+  });
+}
+</script>
+</body>
+</html>

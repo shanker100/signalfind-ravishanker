@@ -1,0 +1,29 @@
+name: Infra
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["infra/**"]
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.9.5 }
+      - name: fmt & validate
+        run: |
+          terraform -chdir=infra fmt -recursive -check
+          terraform -chdir=infra/envs/dev init -upgrade
+          terraform -chdir=infra/envs/dev validate
+      - name: Plan (dev)
+        run: terraform -chdir=infra/envs/dev plan -var-file="dev.tfvars"
+  apply_dev:
+    needs: plan
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.9.5 }
+      - name: Apply (dev)
+        run: terraform -chdir=infra/envs/dev apply -auto-approve -var-file="dev.tfvars"

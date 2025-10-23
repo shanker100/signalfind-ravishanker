@@ -1,0 +1,103 @@
+name: Deploy SignalFind Data components 
+
+on:
+  push:
+    paths: ["data/infra**","data/data/lambda**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-southeast-2
+  TF_WORKING_DIR: infra
+  LAMBDA_DIR: data/data/lambda
+  GLUE_SCRIPT_DIR: data/data/glue
+  DEPLOY_BUCKET: signalfind-artifacts-${{ github.run_id }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # --- Package and Upload Artifacts ---
+      - name: Create artifacts bucket (if not exists)
+        run: |
+          if ! aws s3api head-bucket --bucket $DEPLOY_BUCKET 2>/dev/null; then
+            aws s3 mb s3://$DEPLOY_BUCKET --region $AWS_REGION
+          fi
+
+      - name: Package and upload Lambda functions
+        run: |
+          mkdir -p dist
+          for f in $LAMBDA_DIR/*.py; do
+            name=$(basename $f .py)
+            zip dist/${name}.zip $f
+            aws s3 cp dist/${name}.zip s3://$DEPLOY_BUCKET/lambdas/${name}.zip
+          done
+#We could use this approach if we wanted to reference the Glue job or pipeline.asl.json directly from an S3 bucket. However, for our current solution, the Glue pipeline needs to be set up manually in AWS.
+#      - name: Upload Glue and Step Function scripts
+#        run: |
+#          aws s3 cp $GLUE_SCRIPT_DIR/transform_job.py s3://$DEPLOY_BUCKET/glue/transform_job.py 
+#          aws s3 cp $GLUE_SCRIPT_DIR/pipeline.asl.json s3://$DEPLOY_BUCKET/state_machines/pipeline.asl.json
+      
+      
+      # --- Terraform Deploy ---
+      - name: Terraform Init
+        run: terraform -chdir=${{ env.TF_WORKING_DIR }} init -upgrade
+
+      - name: Terraform Validate
+        run: terraform -chdir=${{ env.TF_WORKING_DIR }} validate
+
+      - name: Terraform Plan
+        run: |
+          terraform -chdir=${{ env.TF_WORKING_DIR }} plan \
+            -var "artifact_bucket=${{ env.DEPLOY_BUCKET }}" \
+            -var-file="dev.tfvars" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main'
+        run: |
+          terraform -chdir=${{ env.TF_WORKING_DIR }} apply \
+            -var "artifact_bucket=${{ env.DEPLOY_BUCKET }}" \
+            -auto-approve tfplan
+
+
+      # --- Update Lambda Code ---
+      - name: Update Lambda functions with new code
+        run: |
+          for f in $LAMBDA_DIR/*.py; do
+            name=$(basename $f .py)
+            aws lambda update-function-code \
+              --function-name ${name}-dev \
+              --s3-bucket $DEPLOY_BUCKET \
+              --s3-key lambdas/${name}.zip || echo "Skipped updating $name"
+          done
+
+      # --- Optional: Initialize OpenSearch Index ---
+      - name: Initialize OpenSearch Index
+        run: |
+          echo "Creating OpenSearch index alias..."
+          curl -XPUT "$OPENSEARCH_URL/_index_template/signalfind-template" \
+            -H 'Content-Type: application/json' \
+            -d @search/index-template.json || echo "Skipped OpenSearch setup"
+
+      # --- Cleanup ---
+      - name: Clean up artifact bucket
+        if: always()
+        run: aws s3 rm s3://$DEPLOY_BUCKET --recursive || true

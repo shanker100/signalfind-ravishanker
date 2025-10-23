@@ -1,0 +1,29 @@
+{
+    "Comment": "SignalFind ETL Pipeline",
+    "StartAt": "TransformData",
+    "States": {
+        "TransformData": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+            "Parameters": {
+                "JobName": "signalfind-transform-job",
+                "Arguments": {
+                    "--S3Input.$": "$.s3_object",
+                    "--S3Output.$": "$.final_output_s3",
+                    "--ManifestTable.$": "$.manifest_table"
+                }
+            },
+            "Next": "CreateBatches"
+        },
+        "CreateBatches": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:ap-southeast-2:123456789012:function:batch_creator-${env}",
+            "InputPath": "$",
+            "ResultPath": "$.batch_result",
+            "Next": "Done"
+        },
+        "Done": {
+            "Type": "Succeed"
+        }
+    }
+}
