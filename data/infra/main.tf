@@ -3,7 +3,12 @@ terraform {
   required_version = ">=1.1"
 }
 
-provider "aws" { region = var.region }
+provider "aws" {
+  region = var.region
+  access_key = ""  //i will replace these with secret variables later. for now, i have kept them hardcoded temporarily for testing purposes.
+  secret_key = ""
+}
+
 
 # -------------------
 # Buckets
